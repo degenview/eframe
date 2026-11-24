@@ -627,12 +627,12 @@ impl GlowWinitRunning<'_> {
 
             let is_visible = viewport.info.visible().unwrap_or(true);
 
-            // Wayland cannot hide a toplevel: a surface that never gets a buffer stays unmapped,
-            // which is the only hidden state there. Presenting a viewport the app hid would map it,
-            // and gate its redraws on frame callbacks that the compositor may withhold for a window
-            // nobody sees (minimized, or on another virtual desktop). So we still run its ui pass,
-            // but never paint it.
-            let paint = is_visible && !(viewport.hidden && is_wayland(window));
+            // Never present a viewport the app hid. On Wayland that would map an unmapped surface
+            // and gate redraws on compositor frame callbacks; on Windows/macOS a hidden 1x1 root
+            // that still presents every heartbeat serializes behind mouse-driven frames on the
+            // shared device and makes the cursor feel stuck while CPU/GPU stay quiet. UI still
+            // runs when show_ui is true (so deferred children keep ticking).
+            let paint = is_visible && !viewport.hidden;
 
             let Some(egui_winit) = viewport.egui_winit.as_mut() else {
                 return Ok(EventResult::Wait);
@@ -1596,14 +1596,6 @@ fn initialize_or_update_viewport(
             entry.into_mut()
         }
     }
-}
-
-/// Is this window a Wayland toplevel?
-fn is_wayland(window: &Window) -> bool {
-    matches!(
-        window.window_handle().map(|handle| handle.as_raw()),
-        Ok(raw_window_handle::RawWindowHandle::Wayland(_))
-    )
 }
 
 /// Is this viewport, or any of its (transitive) descendant viewports, visible?
